@@ -254,7 +254,7 @@ fun HomeScreen(
                 title = { Text(stringResource(CoreR.string.section_home)) },
                 scrollBehavior = scrollBehavior,
                 actions = {
-                    if (Info.env.isActive) {
+                    if (Info.env.isActive && false) { // TempRoot: hide Uninstall Magisk
                         IconButton(onClick = { viewModel.onDeletePressed() }) {
                             Icon(
                                 imageVector = Icons.Default.Delete,
@@ -503,12 +503,7 @@ private fun CoreCard(
     modifier: Modifier = Modifier,
 ) {
     val isInstalled = state != HomeViewModel.State.INVALID
-    val actionLabel = when (state) {
-        HomeViewModel.State.OUTDATED -> stringResource(CoreR.string.update)
-        HomeViewModel.State.INVALID -> stringResource(CoreR.string.install)
-        HomeViewModel.State.UP_TO_DATE -> stringResource(CoreR.string.reinstall)
-        HomeViewModel.State.LOADING -> null
-    }
+    val actionLabel: String? = null // TempRoot: no core Install/Update button
 
     Card(
         modifier = modifier,

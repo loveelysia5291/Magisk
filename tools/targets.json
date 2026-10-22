@@ -1,0 +1,30 @@
+{
+  "_comment": [
+    "Verified against Magisk master (HomeScreen.kt, commit 5231412, 2026-10-08).",
+    "Every rule must match exactly once; apply_temp_root.py fails the build",
+    "otherwise, so a half-patched APK is never produced.",
+    "",
+    "Both actions are in app/apk/src/main/java/com/topjohnwu/magisk/ui/home/HomeScreen.kt:",
+    "  A) the trash IconButton in the Home TopAppBar (uninstall Magisk)",
+    "  B) the InstallButton inside CoreCard (Install / Update / Reinstall of the core)",
+    "The manager's own update lives in AppCard and must stay untouched.",
+    "",
+    "The edits use `&& false`, which keeps every symbol referenced (no unused",
+    "parameter / import warnings that could break an allWarningsAsErrors build)",
+    "and removes the widget from the composition."
+  ],
+  "rules": [
+    {
+      "file": "app/apk/src/main/java/com/topjohnwu/magisk/ui/home/HomeScreen.kt",
+      "find": "(?m)^([ \\t]*)if \\(Info\\.env\\.isActive\\) \\{\\n([ \\t]*IconButton\\(onClick = \\{ viewModel\\.onDeletePressed\\(\\) \\}\\))",
+      "replace": "\\1if (Info.env.isActive && false) { // TempRoot: hide Uninstall Magisk\\n\\2",
+      "why": "hide the uninstall icon in the Home top app bar"
+    },
+    {
+      "file": "app/apk/src/main/java/com/topjohnwu/magisk/ui/home/HomeScreen.kt",
+      "find": "(?m)^([ \\t]*)val actionLabel = when \\(state\\) \\{\\n([ \\t]*)HomeViewModel\\.State\\.OUTDATED -> stringResource\\(CoreR\\.string\\.update\\)\\n([ \\t]*)HomeViewModel\\.State\\.INVALID -> stringResource\\(CoreR\\.string\\.install\\)\\n([ \\t]*)HomeViewModel\\.State\\.UP_TO_DATE -> stringResource\\(CoreR\\.string\\.reinstall\\)\\n([ \\t]*)HomeViewModel\\.State\\.LOADING -> null\\n([ \\t]*)\\}",
+      "replace": "\\1val actionLabel: String? = null // TempRoot: no core Install/Update button",
+      "why": "CoreCard: never offer Install/Update/Reinstall of the Magisk core"
+    }
+  ]
+}
