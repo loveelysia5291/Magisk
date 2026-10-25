@@ -48,7 +48,10 @@ def main(argv):
     for rule in load_rules():
         path = root / rule["file"]
         if not path.is_file():
-            failures.append(f"{rule['file']}: file not found")
+            failures.append(
+                f"{rule['file']}: file not found "
+                f"(ref predates v31.0 / uses HomeFragment.kt, or upstream moved it)"
+            )
             continue
         text = path.read_text(encoding="utf-8")
         matches = list(re.finditer(rule["find"], text, re.MULTILINE))

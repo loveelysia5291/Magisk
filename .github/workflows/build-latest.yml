@@ -1,11 +1,11 @@
 name: Build latest (manual)
 
 # Manual, no schedule.
-#   Run workflow -> resolve newest upstream release (pre-releases included, or the
-#   ref you type) -> apply the TempRoot patch -> build with YOUR keystore at build
-#   time (so `app-release.apk` AND its embedded `assets/stub.apk` share one key)
-#   -> publish a (pre-)release with the APK, the flashable Magisk package, the
-#   complete source archive and LICENSE.
+#   Run workflow -> resolve newest upstream tag (or the ref you type) -> apply the
+#   TempRoot patch -> build with YOUR keystore at build time (so `app-release.apk`
+#   AND its embedded `assets/stub.apk` share one key) -> upload the APK, the
+#   flashable Magisk package, the complete source archive and LICENSE as workflow
+#   artifacts. This workflow does NOT publish a GitHub Release.
 #
 # Why signing must happen inside the build:
 #   Magisk derives `trusted_cert` from the `stub.apk` that magiskinit unpacks from
@@ -22,16 +22,12 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: "Upstream tag or branch (empty = newest release incl. pre-release)"
+        description: "Upstream tag or branch (empty = newest tag, v31.0+)"
         required: false
         default: ""
-      prerelease:
-        description: "Publish as pre-release"
-        type: boolean
-        default: true
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: build-latest
@@ -56,16 +52,13 @@ jobs:
           set -e
           REF="${{ inputs.ref }}"
           if [ -z "$REF" ]; then
-            # No REST API: unauthenticated calls to api.github.com are rate
-            # limited / rejected on shared runners ("403 Resource not
-            # accessible by integration"). Tags are enough to know the newest
-            # published version, pre-release tags included.
-            # macOS `sort` has no -V, so the version comparison is done in
-            # Python (one line: a multi-line -c script would end this YAML
-            # block scalar).
+            # Only stable version tags. `git ls-remote` also exposes canary-*
+            # tags, and a plain numeric sort would pick canary-29001 over
+            # v31.1; those refs do not carry the Compose HomeScreen.kt.
+            # macOS `sort` has no -V, so compare in Python.
             REF=$(git ls-remote --tags --refs https://github.com/topjohnwu/Magisk.git |
                   awk '{print $2}' | sed 's#refs/tags/##' |
-                  python3 -c 'import sys,re; v=[l.strip() for l in sys.stdin if l.strip()]; k=lambda s:([int(x) for x in re.findall(r"\d+",s)], 0 if re.search(r"[A-Za-z]", re.sub(r"^v","",s)) else 1); print(max(v,key=k) if v else "")')
+                  python3 -c 'import sys,re; v=[l.strip() for l in sys.stdin if re.match(r"v[0-9]+(\.[0-9]+)*$", l.strip())]; k=lambda s:tuple(int(x) for x in s[1:].split(".")); print(max(v,key=k) if v else "")')
           fi
           [ -n "$REF" ] || REF=master
           echo "ref=$REF" >> "$GITHUB_OUTPUT"
@@ -85,6 +78,16 @@ jobs:
           # "failed to read .../cxx-rs/Cargo.toml".
           git submodule sync --recursive
           git submodule update --init --recursive
+
+      - name: Check upstream layout
+        run: |
+          set -e
+          HOME_SCREEN=app/apk/src/main/java/com/topjohnwu/magisk/ui/home/HomeScreen.kt
+          if [ ! -f "$HOME_SCREEN" ]; then
+            echo "::error::${{ steps.ref.outputs.ref }} uses the legacy HomeFragment layout (no HomeScreen.kt)."
+            echo "::error::TempRoot targets Magisk v31.0+ / master. Pass a v31.0+ tag or leave the input empty."
+            exit 1
+          fi
 
       - name: Apply the TempRoot patch
         run: python3 tools/temp_root_patch.py .
@@ -143,7 +146,7 @@ jobs:
             echo "^^ both SHA-256 lines must be identical, otherwise the manager will be removed."
           fi
 
-      - name: Collect release files
+      - name: Collect artifact files
         id: payload
         run: |
           set -e
@@ -157,32 +160,10 @@ jobs:
           cp LICENSE dist/LICENSE || true
           ls -l dist
 
-      - name: Publish release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -e
-          SHA="${{ steps.payload.outputs.sha }}"
-          REF="${{ steps.ref.outputs.ref }}"
-          TAG="temp-root-$REF-$(date -u +%Y%m%d)"
-          FLAGS=""
-          [ "${{ inputs.prerelease }}" = "true" ] && FLAGS="--prerelease"
-          gh release create "$TAG" dist/* $FLAGS \
-            --target master \
-            --title "TempRoot Magisk $REF ($SHA)" \
-            --notes "Unofficial GPL-3.0 build based on upstream Magisk \`$REF\`.
-
-          Changes: \"Uninstall Magisk\" hidden, Magisk core Install/Update hidden,
-          manager update kept.
-
-          Signed with the maintainer key at build time, so \`app-release.apk\` and
-          the \`assets/stub.apk\` embedded in it share one certificate - required
-          for magiskd to trust the manager.
-
-          **This only removes the uninstall loop if the running Magisk core was
-          installed from this same build (the boot image embeds this stub).**
-          With an officially patched boot image the daemon still expects the
-          official certificate.
-
-          Source: \`source-$SHA.tar.gz\` (complete corresponding source).
-          Upstream: https://github.com/topjohnwu/Magisk"
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: TempRoot-Magisk-${{ steps.ref.outputs.ref }}-${{ steps.payload.outputs.sha }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14

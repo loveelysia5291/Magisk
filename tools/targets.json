@@ -1,6 +1,8 @@
 {
   "_comment": [
-    "Verified against Magisk master (HomeScreen.kt, commit 5231412, 2026-10-08).",
+    "Verified against Magisk v31.0 / v31.1 and master (Compose HomeScreen.kt, 2026-10).",
+    "v30.7 and older use app/apk/src/main/java/com/topjohnwu/magisk/ui/home/HomeFragment.kt",
+    "(DataBinding) and are NOT covered by these rules; CI resolves v31.0+ or master.",
     "Every rule must match exactly once; apply_temp_root.py fails the build",
     "otherwise, so a half-patched APK is never produced.",
     "",
