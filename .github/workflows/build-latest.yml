@@ -3,9 +3,8 @@ name: Build latest (manual)
 # Manual, no schedule.
 #   Run workflow -> resolve newest upstream tag (or the ref you type) -> apply the
 #   TempRoot patch -> build with YOUR keystore at build time (so `app-release.apk`
-#   AND its embedded `assets/stub.apk` share one key) -> upload the APK, the
-#   flashable Magisk package, the complete source archive and LICENSE as workflow
-#   artifacts. This workflow does NOT publish a GitHub Release.
+#   AND its embedded `assets/stub.apk` share one key) -> publish a GitHub Release
+#   whose only asset is `Magisk v<version>.apk`.
 #
 # Why signing must happen inside the build:
 #   Magisk derives `trusted_cert` from the `stub.apk` that magiskinit unpacks from
@@ -15,6 +14,9 @@ name: Build latest (manual)
 #   Post-signing only the APK with apksigner leaves the embedded stub signed with
 #   the old key -> "signature mismatch" -> magiskd uninstalls the manager.
 #   Passing keyStore/keyAlias/... through config.prop signs both, consistently.
+#
+# The complete source stays in the repository (GPL-3.0 obligation) and is also
+# attached to the workflow run as an artifact.
 #
 # Secrets: KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_PASSWORD, KEY_ALIAS (key0)
 
@@ -27,7 +29,7 @@ on:
         default: ""
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: build-latest
@@ -151,19 +153,56 @@ jobs:
         run: |
           set -e
           SHA=$(git rev-parse --short HEAD)
+          REF="${{ steps.ref.outputs.ref }}"
+          # Release asset name: "Magisk v31.0.apk". For a branch (master) fall back
+          # to the app's own versionName so the file never becomes "vmaster".
+          VER="${REF#v}"
+          if ! echo "$VER" | grep -Eq '^[0-9]+(\.[0-9]+)*$'; then
+            VER=$(grep -E '^versionName' app/apk/build.gradle.kts 2>/dev/null |
+                  sed -E 's/.*"([^"]+)".*/\1/' | head -1)
+            [ -n "$VER" ] || VER="$SHA"
+            VER="${VER#v}"
+          fi
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "ver=$VER" >> "$GITHUB_OUTPUT"
           mkdir -p dist
-          cp out/app-*.apk dist/ 2>/dev/null || true
-          cp out/magisk-*.apk dist/ 2>/dev/null || true
-          cp out/magisk-*.zip dist/ 2>/dev/null || true
+          APP=$(ls out/app-release.apk out/app-debug.apk 2>/dev/null | head -1)
+          [ -n "$APP" ] || { echo "::error::no manager APK in out/"; ls -l out; exit 1; }
+          cp "$APP" "dist/Magisk v$VER.apk"
+          # Source archive stays as an artifact only (the repo already has it).
           git archive --format=tar.gz --prefix="Magisk-$SHA/" -o "dist/source-$SHA.tar.gz" HEAD
-          cp LICENSE dist/LICENSE || true
           ls -l dist
 
-      - name: Upload build artifacts
+      - name: Upload source artifact
         uses: actions/upload-artifact@v4
         with:
           name: TempRoot-Magisk-${{ steps.ref.outputs.ref }}-${{ steps.payload.outputs.sha }}
-          path: dist/*
+          path: dist/source-*.tar.gz
           if-no-files-found: error
           retention-days: 14
+
+      - name: Publish release (APK only)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          VER="${{ steps.payload.outputs.ver }}"
+          TAG="v$VER"
+          APK="dist/Magisk v$VER.apk"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG exists - replacing the APK asset"
+            gh release upload "$TAG" "$APK" --clobber
+          else
+            gh release create "$TAG" "$APK" \
+              --target master \
+              --title "Magisk v$VER" \
+              --notes "Unofficial GPL-3.0 build based on upstream Magisk ${{ steps.ref.outputs.ref }} (${{ steps.payload.outputs.sha }}).
+
+          Changes: uninstall hidden, core install/update hidden, manager reinstall and latest-version row
+          removed, update channel hidden, patch-boot entry removed, Magisk card titled
+          \`Magisk（越獄模式）\` and only shown after root; the environment-fix dialog stays visible
+          but its OK button no longer reflashes anything.
+
+          Signed with the maintainer key at build time, so the app and the \`assets/stub.apk\`
+          embedded in it share one certificate. Source: this repository."
+          fi
