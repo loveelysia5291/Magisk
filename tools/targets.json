@@ -59,6 +59,18 @@
       "find": "(?m)^([ \\t]*)SettingsArrow\\(\\n([ \\t]*)title = stringResource\\(CoreR\\.string\\.patch_image\\),",
       "replace": "\\1if (false) SettingsArrow( // TempRoot: no patch-boot tool\\n\\2title = stringResource(CoreR.string.patch_image),",
       "why": "install dialog: remove the 'patch a file' (boot image) entry"
+    },
+    {
+      "file": "app/apk/src/main/java/com/topjohnwu/magisk/ui/home/HomeScreen.kt",
+      "find": "(?m)^([ \\t]*)if \\(showEnvFixDialog && false\\) \\{ // TempRoot: never prompt to fix the environment\\n",
+      "replace": "\\1if (showEnvFixDialog) { // TempRoot: keep the environment hint, see the dialog below\\n",
+      "why": "keep the environment dialog visible (it is the only clue when injection is broken)"
+    },
+    {
+      "file": "app/apk/src/main/java/com/topjohnwu/magisk/ui/home/HomeScreen.kt",
+      "find": "(?m)^([ \\t]*)onDismissRequest = onDismiss,\\n([ \\t]*)title = stringResource\\(CoreR\\.string\\.env_fix_title\\),\\n([ \\t]*)confirmText = stringResource\\(android\\.string\\.ok\\),\\n([ \\t]*)onConfirm = \\{\\n([ \\t]*)if \\(needsFullFix\\) onNavigateInstall\\(\\) else onFixEnv\\(\\)\\n([ \\t]*)\\},\\n([ \\t]*)dismissText = stringResource\\(android\\.string\\.cancel\\),\\n([ \\t]*)onDismiss = onDismiss,",
+      "replace": "\\1onDismissRequest = onDismiss,\\n\\2title = stringResource(CoreR.string.env_fix_title),\\n\\3// TempRoot: OK is dismiss-only. The original handler re-flashes the\\n\\3// boot image or repairs the environment, which cannot work under a\\n\\3// temporary root. The dialog itself stays visible on purpose.\\n\\3confirmText = stringResource(android.R.string.ok),\\n\\4onConfirm = { },\\n\\4if (false) {\\n\\5if (needsFullFix) onNavigateInstall() else onFixEnv()\\n\\6}\\n\\7dismissText = stringResource(android.R.string.cancel),\\n\\8onDismiss = onDismiss,",
+      "why": "environment dialog: keep it visible, make OK dismiss-only (no reflash/fix)"
     }
   ]
 }
