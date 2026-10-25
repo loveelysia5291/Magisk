@@ -48,6 +48,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          submodules: "recursive"
 
       - name: Resolve the upstream ref
         id: ref
@@ -74,6 +75,11 @@ jobs:
           git checkout -B build FETCH_HEAD
           mkdir -p tools
           cp -r "$RUNNER_TEMP/tools/." tools/
+          # Magisk vendors cxx-rs and quick-protobuf as git submodules
+          # (native/src/external/*). Without this the Rust build dies with
+          # "failed to read .../cxx-rs/Cargo.toml".
+          git submodule sync --recursive
+          git submodule update --init --recursive
 
       - name: Apply the TempRoot patch
         run: python3 tools/temp_root_patch.py .
