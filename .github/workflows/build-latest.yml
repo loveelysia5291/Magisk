@@ -56,11 +56,16 @@ jobs:
           set -e
           REF="${{ inputs.ref }}"
           if [ -z "$REF" ]; then
-            API="https://api.github.com/repos/topjohnwu/Magisk/releases?per_page=20"
-            REF=$(curl -fsSL "$API" | jq -r '[.[] | select(.draft | not)][0].tag_name // empty')
-            if [ -z "$REF" ]; then
-              REF=$(curl -fsSL "$API" | python3 -c 'import json,sys; d=[x for x in json.load(sys.stdin) if not x.get("draft")]; print(d[0]["tag_name"] if d else "")')
-            fi
+            # No REST API: unauthenticated calls to api.github.com are rate
+            # limited / rejected on shared runners ("403 Resource not
+            # accessible by integration"). Tags are enough to know the newest
+            # published version, pre-release tags included.
+            # macOS `sort` has no -V, so the version comparison is done in
+            # Python (one line: a multi-line -c script would end this YAML
+            # block scalar).
+            REF=$(git ls-remote --tags --refs https://github.com/topjohnwu/Magisk.git |
+                  awk '{print $2}' | sed 's#refs/tags/##' |
+                  python3 -c 'import sys,re; v=[l.strip() for l in sys.stdin if l.strip()]; k=lambda s:([int(x) for x in re.findall(r"\d+",s)], 0 if re.search(r"[A-Za-z]", re.sub(r"^v","",s)) else 1); print(max(v,key=k) if v else "")')
           fi
           [ -n "$REF" ] || REF=master
           echo "ref=$REF" >> "$GITHUB_OUTPUT"
