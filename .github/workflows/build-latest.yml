@@ -55,10 +55,11 @@ jobs:
           set -e
           REF="${{ inputs.ref }}"
           if [ -z "$REF" ]; then
-            REF=$(curl -fsSL "https://api.github.com/repos/topjohnwu/Magisk/releases?per_page=20" |
-              python3 -c 'import json,sys
-r = [x for x in json.load(sys.stdin) if not x.get("draft")]
-print(r[0]["tag_name"] if r else "")')
+            API="https://api.github.com/repos/topjohnwu/Magisk/releases?per_page=20"
+            REF=$(curl -fsSL "$API" | jq -r '[.[] | select(.draft | not)][0].tag_name // empty')
+            if [ -z "$REF" ]; then
+              REF=$(curl -fsSL "$API" | python3 -c 'import json,sys; d=[x for x in json.load(sys.stdin) if not x.get("draft")]; print(d[0]["tag_name"] if d else "")')
+            fi
           fi
           [ -n "$REF" ] || REF=master
           echo "ref=$REF" >> "$GITHUB_OUTPUT"
