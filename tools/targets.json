@@ -1,9 +1,8 @@
 {
   "_comment": [
-    "Verified against Magisk v31.x / master (Compose UI). v30.7 and older used",
-    "HomeFragment.kt (DataBinding) and are NOT covered by these rules.",
-    "Every rule must match exactly once; apply_temp_root.py fails the build",
-    "otherwise, so a half-patched APK is never produced."
+    "Verified against Magisk v31.1 (the tag CI resolves) and against master.",
+    "v30.7 and older use HomeFragment.kt (DataBinding) and are not covered.",
+    "Every rule must match exactly once; apply_temp_root.py fails the build otherwise."
   ],
   "rules": [
     {
@@ -20,8 +19,8 @@
     },
     {
       "file": "app/apk/src/main/java/com/topjohnwu/magisk/ui/home/HomeScreen.kt",
-      "find": "(?m)^([ \\t]*)if \\(actionLabel != null\\) \\{\\n([ \\t]*)Spacer\\(Modifier\\.width\\(4\\.dp\\)\\)",
-      "replace": "\\1if (actionLabel != null && false) { // TempRoot: no manager reinstall button\\n\\2Spacer(Modifier.width(4.dp))",
+      "find": "(?m)^([ \\t]*)if \\(actionLabel != null\\) \\{\\n(?:[ \\t]*Spacer\\(Modifier\\.width\\(4\\.dp\\)\\)\\n)?([ \\t]*)InstallButton\\(\\n([ \\t]*)label = actionLabel,\\n([ \\t]*)onClick = onManagerPressed,",
+      "replace": "\\1if (actionLabel != null && false) { // TempRoot: no manager reinstall button\\n\\2InstallButton(\\n\\3label = actionLabel,\\n\\4onClick = onManagerPressed,",
       "why": "AppCard: hide the manager Reinstall/Update button"
     },
     {
@@ -38,15 +37,15 @@
     },
     {
       "file": "app/apk/src/main/java/com/topjohnwu/magisk/ui/home/HomeScreen.kt",
-      "find": "(?m)^ {20}Text\\(\\n {24}text = stringResource\\(CoreR\\.string\\.magisk\\),\\n {24}style = MaterialTheme\\.typography\\.titleLarge\\n {20}\\)",
-      "replace": "                    if (isInstalled) {\n                        Text(\n                            text = \"Magisk（越獄模式）\",\n                            style = MaterialTheme.typography.titleLarge\n                        )\n                    }",
-      "why": "rename the Magisk card title to Magisk（越獄模式） and show it only when rooted"
+      "find": "(?m)^([ \\t]*)Text\\(\\n([ \\t]*)text = stringResource\\(CoreR\\.string\\.magisk\\),\\n([ \\t]*)style = MaterialTheme\\.typography\\.titleLarge\\n([ \\t]*)\\)",
+      "replace": "\\1if (isInstalled) {\\n\\1    Text(\\n\\1        text = \"Magisk（越獄模式）\",\\n\\1        style = MaterialTheme.typography.titleLarge\\n\\1    )\\n\\1}",
+      "why": "rename the Magisk card title to Magisk（越獄模式）, shown only when rooted"
     },
     {
       "file": "app/apk/src/main/java/com/topjohnwu/magisk/ui/home/HomeScreen.kt",
-      "find": "(?m)^([ \\t]*)if \\(showEnvFixDialog\\) \\{\\n([ \\t]*)EnvFixComposableDialog\\(",
-      "replace": "\\1if (showEnvFixDialog && false) { // TempRoot: never prompt to fix the environment\\n\\2EnvFixComposableDialog(",
-      "why": "hide the 'additional setup required' dialog"
+      "find": "(?m)^([ \\t]*)title = stringResource\\(CoreR\\.string\\.env_fix_title\\),\\n([ \\t]*)confirmText = stringResource\\(android\\.R\\.string\\.ok\\),\\n([ \\t]*)onConfirm = \\{\\n([ \\t]*)if \\(needsFullFix\\) onNavigateInstall\\(\\) else onFixEnv\\(\\)\\n([ \\t]*)\\},\\n([ \\t]*)dismissText = stringResource\\(android\\.R\\.string\\.cancel\\),",
+      "replace": "\\1title = stringResource(CoreR.string.env_fix_title),\\n\\2// TempRoot: OK is dismiss-only. The original handler re-flashed the\\n\\2// boot image / repaired the environment, which cannot work under a\\n\\2// temporary root. The dialog itself stays visible on purpose.\\n\\2confirmText = stringResource(android.R.string.ok),\\n\\3onConfirm = { }, // TempRoot: disabled\\n\\6dismissText = stringResource(android.R.string.cancel),",
+      "why": "environment dialog: keep it, but make OK dismiss-only (no reflash/fix)"
     },
     {
       "file": "app/apk/src/main/java/com/topjohnwu/magisk/ui/settings/SettingsScreen.kt",
@@ -59,18 +58,6 @@
       "find": "(?m)^([ \\t]*)SettingsArrow\\(\\n([ \\t]*)title = stringResource\\(CoreR\\.string\\.patch_image\\),",
       "replace": "\\1if (false) SettingsArrow( // TempRoot: no patch-boot tool\\n\\2title = stringResource(CoreR.string.patch_image),",
       "why": "install dialog: remove the 'patch a file' (boot image) entry"
-    },
-    {
-      "file": "app/apk/src/main/java/com/topjohnwu/magisk/ui/home/HomeScreen.kt",
-      "find": "(?m)^([ \\t]*)if \\(showEnvFixDialog && false\\) \\{ // TempRoot: never prompt to fix the environment\\n",
-      "replace": "\\1if (showEnvFixDialog) { // TempRoot: keep the environment hint, see the dialog below\\n",
-      "why": "keep the environment dialog visible (it is the only clue when injection is broken)"
-    },
-    {
-      "file": "app/apk/src/main/java/com/topjohnwu/magisk/ui/home/HomeScreen.kt",
-      "find": "(?m)^([ \\t]*)onDismissRequest = onDismiss,\\n([ \\t]*)title = stringResource\\(CoreR\\.string\\.env_fix_title\\),\\n([ \\t]*)confirmText = stringResource\\(android\\.string\\.ok\\),\\n([ \\t]*)onConfirm = \\{\\n([ \\t]*)if \\(needsFullFix\\) onNavigateInstall\\(\\) else onFixEnv\\(\\)\\n([ \\t]*)\\},\\n([ \\t]*)dismissText = stringResource\\(android\\.string\\.cancel\\),\\n([ \\t]*)onDismiss = onDismiss,",
-      "replace": "\\1onDismissRequest = onDismiss,\\n\\2title = stringResource(CoreR.string.env_fix_title),\\n\\3// TempRoot: OK is dismiss-only. The original handler re-flashes the\\n\\3// boot image or repairs the environment, which cannot work under a\\n\\3// temporary root. The dialog itself stays visible on purpose.\\n\\3confirmText = stringResource(android.R.string.ok),\\n\\4onConfirm = { },\\n\\4if (false) {\\n\\5if (needsFullFix) onNavigateInstall() else onFixEnv()\\n\\6}\\n\\7dismissText = stringResource(android.R.string.cancel),\\n\\8onDismiss = onDismiss,",
-      "why": "environment dialog: keep it visible, make OK dismiss-only (no reflash/fix)"
     }
   ]
 }
