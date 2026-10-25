@@ -1,19 +1,9 @@
 {
   "_comment": [
-    "Verified against Magisk v31.0 / v31.1 and master (Compose HomeScreen.kt, 2026-10).",
-    "v30.7 and older use app/apk/src/main/java/com/topjohnwu/magisk/ui/home/HomeFragment.kt",
-    "(DataBinding) and are NOT covered by these rules; CI resolves v31.0+ or master.",
+    "Verified against Magisk v31.x / master (Compose UI). v30.7 and older used",
+    "HomeFragment.kt (DataBinding) and are NOT covered by these rules.",
     "Every rule must match exactly once; apply_temp_root.py fails the build",
-    "otherwise, so a half-patched APK is never produced.",
-    "",
-    "Both actions are in app/apk/src/main/java/com/topjohnwu/magisk/ui/home/HomeScreen.kt:",
-    "  A) the trash IconButton in the Home TopAppBar (uninstall Magisk)",
-    "  B) the InstallButton inside CoreCard (Install / Update / Reinstall of the core)",
-    "The manager's own update lives in AppCard and must stay untouched.",
-    "",
-    "The edits use `&& false`, which keeps every symbol referenced (no unused",
-    "parameter / import warnings that could break an allWarningsAsErrors build)",
-    "and removes the widget from the composition."
+    "otherwise, so a half-patched APK is never produced."
   ],
   "rules": [
     {
@@ -27,6 +17,48 @@
       "find": "(?m)^([ \\t]*)val actionLabel = when \\(state\\) \\{\\n([ \\t]*)HomeViewModel\\.State\\.OUTDATED -> stringResource\\(CoreR\\.string\\.update\\)\\n([ \\t]*)HomeViewModel\\.State\\.INVALID -> stringResource\\(CoreR\\.string\\.install\\)\\n([ \\t]*)HomeViewModel\\.State\\.UP_TO_DATE -> stringResource\\(CoreR\\.string\\.reinstall\\)\\n([ \\t]*)HomeViewModel\\.State\\.LOADING -> null\\n([ \\t]*)\\}",
       "replace": "\\1val actionLabel: String? = null // TempRoot: no core Install/Update button",
       "why": "CoreCard: never offer Install/Update/Reinstall of the Magisk core"
+    },
+    {
+      "file": "app/apk/src/main/java/com/topjohnwu/magisk/ui/home/HomeScreen.kt",
+      "find": "(?m)^([ \\t]*)if \\(actionLabel != null\\) \\{\\n([ \\t]*)Spacer\\(Modifier\\.width\\(4\\.dp\\)\\)",
+      "replace": "\\1if (actionLabel != null && false) { // TempRoot: no manager reinstall button\\n\\2Spacer(Modifier.width(4.dp))",
+      "why": "AppCard: hide the manager Reinstall/Update button"
+    },
+    {
+      "file": "app/apk/src/main/java/com/topjohnwu/magisk/ui/home/HomeScreen.kt",
+      "find": "(?m)^[ \\t]*if \\(state != HomeViewModel\\.State\\.LOADING\\) \\{\\n[ \\t]*AppDetailRow\\(label = stringResource\\(CoreR\\.string\\.home_latest_version\\), value = remoteVersion\\)\\n[ \\t]*\\}\\n",
+      "replace": "",
+      "why": "AppCard: drop the 'latest version' row"
+    },
+    {
+      "file": "app/apk/src/main/java/com/topjohnwu/magisk/ui/home/HomeScreen.kt",
+      "find": "(?m)^([ \\t]*)CoreCard\\(\\n([ \\t]*)modifier = Modifier\\.fillMaxWidth\\(\\),\\n([ \\t]*)state = uiState\\.magiskState,",
+      "replace": "\\1if (uiState.magiskState != HomeViewModel.State.INVALID) CoreCard( // TempRoot: only after su\\n\\2modifier = Modifier.fillMaxWidth(),\\n\\3state = uiState.magiskState,",
+      "why": "hide the whole Magisk card until root is available"
+    },
+    {
+      "file": "app/apk/src/main/java/com/topjohnwu/magisk/ui/home/HomeScreen.kt",
+      "find": "(?m)^ {20}Text\\(\\n {24}text = stringResource\\(CoreR\\.string\\.magisk\\),\\n {24}style = MaterialTheme\\.typography\\.titleLarge\\n {20}\\)",
+      "replace": "                    if (isInstalled) {\n                        Text(\n                            text = \"Magisk（越獄模式）\",\n                            style = MaterialTheme.typography.titleLarge\n                        )\n                    }",
+      "why": "rename the Magisk card title to Magisk（越獄模式） and show it only when rooted"
+    },
+    {
+      "file": "app/apk/src/main/java/com/topjohnwu/magisk/ui/home/HomeScreen.kt",
+      "find": "(?m)^([ \\t]*)if \\(showEnvFixDialog\\) \\{\\n([ \\t]*)EnvFixComposableDialog\\(",
+      "replace": "\\1if (showEnvFixDialog && false) { // TempRoot: never prompt to fix the environment\\n\\2EnvFixComposableDialog(",
+      "why": "hide the 'additional setup required' dialog"
+    },
+    {
+      "file": "app/apk/src/main/java/com/topjohnwu/magisk/ui/settings/SettingsScreen.kt",
+      "find": "(?m)^([ \\t]*)SettingsDropdown\\(\\n([ \\t]*)title = stringResource\\(CoreR\\.string\\.settings_update_channel_title\\),",
+      "replace": "\\1if (false) SettingsDropdown( // TempRoot: no update channel\\n\\2title = stringResource(CoreR.string.settings_update_channel_title),",
+      "why": "settings: hide the update channel selector"
+    },
+    {
+      "file": "app/apk/src/main/java/com/topjohnwu/magisk/ui/install/InstallDialog.kt",
+      "find": "(?m)^([ \\t]*)SettingsArrow\\(\\n([ \\t]*)title = stringResource\\(CoreR\\.string\\.patch_image\\),",
+      "replace": "\\1if (false) SettingsArrow( // TempRoot: no patch-boot tool\\n\\2title = stringResource(CoreR.string.patch_image),",
+      "why": "install dialog: remove the 'patch a file' (boot image) entry"
     }
   ]
 }
