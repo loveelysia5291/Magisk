@@ -184,11 +184,17 @@ jobs:
       - name: Publish release (APK only)
         env:
           GH_TOKEN: ${{ github.token }}
+          # Without this, gh resolves the repository from the git remotes of the
+          # checked-out tree - which is upstream (topjohnwu/Magisk) after the
+          # "check out upstream at that ref" step - and tries to modify THEIR
+          # release (403 Resource not accessible by integration).
+          GH_REPO: ${{ github.repository }}
         run: |
           set -e
           VER="${{ steps.payload.outputs.ver }}"
-          TAG="v$VER"
+          TAG="temp-root-v$VER"
           APK="dist/Magisk v$VER.apk"
+          echo "Publishing to $GH_REPO as $TAG"
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release $TAG exists - replacing the APK asset"
             gh release upload "$TAG" "$APK" --clobber
