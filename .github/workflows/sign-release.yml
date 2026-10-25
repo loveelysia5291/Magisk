@@ -1,0 +1,139 @@
+name: Sign and Release
+
+# Signs the APK produced by "Magisk Build" with the maintainer's keystore and
+# publishes a GitHub Release (APK + complete source archive + LICENSE, GPL-3.0).
+#
+# Required repository secrets:
+#   KEYSTORE_BASE64     base64 of the .jks file (single line)
+#   KEYSTORE_PASSWORD   store password
+#   KEY_PASSWORD        key password
+#   KEY_ALIAS           key alias (default: key0)
+#
+# The keystore is only materialised in $RUNNER_TEMP and is never committed.
+
+on:
+  workflow_run:
+    workflows: ["Magisk Build"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "Run id of a successful 'Magisk Build' run"
+        required: true
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  sign-release:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    env:
+      RUN_ID: ${{ github.event.workflow_run.id || github.event.inputs.run_id }}
+      BUILD_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+      KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'key0' }}
+    steps:
+      - name: Check out the built commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.BUILD_SHA }}
+          fetch-depth: 0
+
+      - name: Download the build artifact
+        uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ env.RUN_ID }}
+          github-token: ${{ github.token }}
+          path: artifact
+
+      - name: Pick the APK
+        id: pick
+        run: |
+          set -e
+          # Prefer an unsigned release build, then any release, then debug.
+          APK=$(find artifact -name 'app-release-unsigned.apk' | head -1)
+          [ -n "$APK" ] || APK=$(find artifact -name 'app-release*.apk' | head -1)
+          [ -n "$APK" ] || APK=$(find artifact -name 'app-debug.apk' | head -1)
+          if [ -z "$APK" ]; then
+            echo "::error::No APK found in the build artifact"
+            find artifact -name '*.apk' -o -name '*.zip' | head -20
+            exit 1
+          fi
+          echo "input=$APK" >> "$GITHUB_OUTPUT"
+          echo "Using $APK"
+
+      - name: Check whether the keystore secret is configured
+        id: ks
+        run: |
+          if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
+            echo "have=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::KEYSTORE_BASE64 is not set yet - the build is fine, signing/release is skipped."
+            echo "have=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Sign with the maintainer keystore
+        if: steps.ks.outputs.have == 'true'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -e
+          KS="$RUNNER_TEMP/keystore.jks"
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$KS"
+
+          SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          BT=$(ls -d "$SDK"/build-tools/* 2>/dev/null | sort -V | tail -1)
+          [ -x "$BT/apksigner" ] || { echo "::error::apksigner not found under $SDK"; exit 1; }
+
+          "$BT/zipalign" -p -f 4 "${{ steps.pick.outputs.input }}" "$RUNNER_TEMP/aligned.apk"
+          "$BT/apksigner" sign \
+            --ks "$KS" \
+            --ks-key-alias "$KEY_ALIAS" \
+            --ks-pass "pass:$KEYSTORE_PASSWORD" \
+            --key-pass "pass:$KEY_PASSWORD" \
+            --out "$RUNNER_TEMP/TempRoot-Magisk.apk" \
+            "$RUNNER_TEMP/aligned.apk"
+          "$BT/apksigner" verify --print-certs "$RUNNER_TEMP/TempRoot-Magisk.apk" | head -5
+          rm -f "$KS"
+
+      - name: Build the release payload (APK + GPL source)
+        id: payload
+        if: steps.ks.outputs.have == 'true'
+        run: |
+          set -e
+          mkdir -p out
+          cp "$RUNNER_TEMP/TempRoot-Magisk.apk" "out/TempRoot-Magisk-${BUILD_SHA:0:7}.apk"
+          git archive --format=tar.gz --prefix="Magisk-${BUILD_SHA:0:7}/" \
+            -o "out/source-${BUILD_SHA:0:7}.tar.gz" "$BUILD_SHA"
+          cp LICENSE out/LICENSE
+          cp app/apk/src/main/java/com/topjohnwu/magisk/ui/home/HomeScreen.kt \
+             "out/HomeScreen.kt.patched" || true
+          ls -l out
+          echo "ver=${BUILD_SHA:0:7}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish release
+        if: steps.ks.outputs.have == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          TAG="temp-root-$(date -u +%Y%m%d)-${{ steps.payload.outputs.ver }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; uploading assets"
+            gh release upload "$TAG" out/* --clobber
+          else
+            gh release create "$TAG" out/* \
+              --target "$BUILD_SHA" \
+              --title "TempRoot Magisk ${{ steps.payload.outputs.ver }}" \
+              --notes "Unofficial GPL-3.0 build of Magisk with the TempRoot changes:
+          - \"Uninstall Magisk\" hidden
+          - Magisk core Install/Update hidden (manager update kept)
+
+          Source: \`source-${{ steps.payload.outputs.ver }}.tar.gz\` (complete corresponding source).
+          Upstream: https://github.com/topjohnwu/Magisk (GPL-3.0)."
+          fi

@@ -1,0 +1,80 @@
+name: Sync upstream Magisk
+
+# Keeps the fork up to date with topjohnwu/Magisk and rebuilds automatically.
+#   - runs every day (and on demand)
+#   - merges upstream/master into master
+#   - re-applies the TempRoot patch if the merge replaced HomeScreen.kt
+#   - pushes, then explicitly triggers the "Magisk Build" workflow
+#     (a push made with GITHUB_TOKEN does not start other workflows,
+#      so the build is dispatched through the API instead)
+
+on:
+  schedule:
+    - cron: "17 4 * * *" # daily 04:17 UTC = 12:17 Asia/Taipei
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the fork
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Merge upstream/master
+        id: merge
+        run: |
+          set -e
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream https://github.com/topjohnwu/Magisk.git
+          git fetch --no-tags upstream master
+          if git merge-base --is-ancestor upstream/master HEAD; then
+            echo "Already up to date with upstream."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if ! git merge --no-edit upstream/master; then
+            git merge --abort || true
+            echo "::error::Upstream merge conflicts with the TempRoot commit."
+            echo "::error::Fix it locally: git fetch upstream && git merge upstream/master"
+            exit 1
+          fi
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Verify the TempRoot change survived the merge
+        id: patch
+        if: steps.merge.outputs.changed == 'true'
+        run: |
+          set -e
+          F=app/apk/src/main/java/com/topjohnwu/magisk/ui/home/HomeScreen.kt
+          if grep -q 'TempRoot: hide Uninstall Magisk' "$F" &&
+             grep -q 'TempRoot: no core Install/Update button' "$F"; then
+            echo "TempRoot change still present."
+            echo "reapplied=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "Upstream replaced HomeScreen.kt - re-applying the patch."
+          python3 tools/temp_root_patch.py .
+          git add -A
+          git commit -m "TempRoot: re-apply after upstream merge"
+          echo "reapplied=true" >> "$GITHUB_OUTPUT"
+
+      - name: Push
+        if: steps.merge.outputs.changed == 'true'
+        run: git push origin HEAD:master
+
+      - name: Trigger the Magisk Build workflow
+        if: steps.merge.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run build.yml --ref master
