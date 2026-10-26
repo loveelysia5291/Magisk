@@ -126,7 +126,20 @@ jobs:
           is-asset-build: true
 
       - name: Build release
-        run: ./build.py -c config.prop -vr all
+        run: |
+          set -e
+          # 拆分編譯步驟，確保 stub.apk 完整生成並放入 assets 後，再啟動 app 的打包作業
+          # 避免 Gradle 的任務快取或相依性判定錯誤導致未將新產生的 stub.apk 包裝進 APK
+          ./build.py -c config.prop -vr ndk
+          ./build.py -c config.prop -vr stub
+          
+          # 強制檢查 stub.apk 是否成功複製到 assets 目錄
+          if [ ! -f "app/src/main/assets/stub.apk" ]; then
+            echo "::error::stub.apk was not generated in app/src/main/assets/"
+            exit 1
+          fi
+          
+          ./build.py -c config.prop -vr app
 
       - name: Stop the gradle daemon
         run: ./app/gradlew --stop || true
