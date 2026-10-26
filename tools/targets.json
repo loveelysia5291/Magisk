@@ -43,9 +43,9 @@
     },
     {
       "file": "app/apk/src/main/java/com/topjohnwu/magisk/ui/home/HomeScreen.kt",
-      "find": "(?m)^([ \\t]*)title = stringResource\\(CoreR\\.string\\.env_fix_title\\),\\n([ \\t]*)confirmText = stringResource\\(android\\.R\\.string\\.ok\\),\\n([ \\t]*)onConfirm = \\{\\n([ \\t]*)if \\(needsFullFix\\) onNavigateInstall\\(\\) else onFixEnv\\(\\)\\n([ \\t]*)\\},\\n([ \\t]*)dismissText = stringResource\\(android\\.R\\.string\\.cancel\\),",
-      "replace": "\\1title = stringResource(CoreR.string.env_fix_title),\\n\\2// TempRoot: hide confirm button to prevent accidental reboot\\n\\2confirmText = null,\\n\\2onConfirm = null,\\n\\6dismissText = stringResource(android.R.string.cancel),",
-      "why": "environment dialog: hide confirm button to prevent accidental reboot"
+      "find": "(?m)^([ \\t]*)if \\(showEnvFixDialog\\) \\{\\n([ \\t]*)EnvFixComposableDialog\\(",
+      "replace": "\\1if (showEnvFixDialog && false) { // TempRoot: never prompt to fix the environment\\n\\2EnvFixComposableDialog(",
+      "why": "hide the 'additional setup required' dialog"
     },
     {
       "file": "app/apk/src/main/java/com/topjohnwu/magisk/ui/settings/SettingsScreen.kt",
