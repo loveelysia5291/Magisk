@@ -1,19 +1,19 @@
 name: Build latest (manual)
 
 # Manual, no schedule.
-#   Run workflow -> resolve newest upstream tag (or the ref you type) -> apply the
-#   TempRoot patch -> build with YOUR keystore at build time (so `app-release.apk`
-#   AND its embedded `assets/stub.apk` share one key) -> publish a GitHub Release
-#   whose only asset is `Magisk v<version>.apk`.
+#   Run workflow -> resolve newest upstream tag (or the ref you type) -> apply the
+#   TempRoot patch -> build with YOUR keystore at build time (so `app-release.apk`
+#   AND its embedded `assets/stub.apk` share one key) -> publish a GitHub Release
+#   whose only asset is `Magisk v<version>.apk`.
 #
 # Why signing must happen inside the build:
-#   Magisk derives `trusted_cert` from the `stub.apk` that magiskinit unpacks from
-#   the boot ramdisk (native/src/init/rootdir.cpp). That stub is the one embedded
-#   in the app's assets at build time (app/core/.../assets/stub.apk), and the
-#   daemon compares the manager APK's signature with it (native/src/core/package.rs).
-#   Post-signing only the APK with apksigner leaves the embedded stub signed with
-#   the old key -> "signature mismatch" -> magiskd uninstalls the manager.
-#   Passing keyStore/keyAlias/... through config.prop signs both, consistently.
+#   Magisk derives `trusted_cert` from the `stub.apk` that magiskinit unpacks from
+#   the boot ramdisk (native/src/init/rootdir.cpp). That stub is the one embedded
+#   in the app's assets at build time (app/core/.../assets/stub.apk), and the
+#   daemon compares the manager APK's signature with it (native/src/core/package.rs).
+#   Post-signing only the APK with apksigner leaves the embedded stub signed with
+#   the old key -> "signature mismatch" -> magiskd uninstalls the manager.
+#   Passing keyStore/keyAlias/... through config.prop signs both, consistently.
 #
 # The complete source stays in the repository (GPL-3.0 obligation) and is also
 # attached to the workflow run as an artifact.
@@ -21,194 +21,194 @@ name: Build latest (manual)
 # Secrets: KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_PASSWORD, KEY_ALIAS (key0)
 
 on:
-  workflow_dispatch:
-    inputs:
-      ref:
-        description: "Upstream tag or branch (empty = newest tag, v31.0+)"
-        required: false
-        default: ""
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Upstream tag or branch (empty = newest tag, v31.0+)"
+        required: false
+        default: ""
 
 permissions:
-  contents: write
+  contents: write
 
 concurrency:
-  group: build-latest
-  cancel-in-progress: false
+  group: build-latest
+  cancel-in-progress: false
 
 jobs:
-  build:
-    runs-on: macos-26
-    env:
-      KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'key0' }}
-      HAS_KEYSTORE: ${{ secrets.KEYSTORE_BASE64 != '' }}
-    steps:
-      - name: Check out the fork (for tools/)
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-          submodules: "recursive"
+  build:
+    runs-on: macos-26
+    env:
+      KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'key0' }}
+      HAS_KEYSTORE: ${{ secrets.KEYSTORE_BASE64 != '' }}
+    steps:
+      - name: Check out the fork (for tools/)
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          submodules: "recursive"
 
-      - name: Resolve the upstream ref
-        id: ref
-        run: |
-          set -e
-          REF="${{ inputs.ref }}"
-          if [ -z "$REF" ]; then
-            # Only stable version tags. `git ls-remote` also exposes canary-*
-            # tags, and a plain numeric sort would pick canary-29001 over
-            # v31.1; those refs do not carry the Compose HomeScreen.kt.
-            # macOS `sort` has no -V, so compare in Python.
-            REF=$(git ls-remote --tags --refs https://github.com/topjohnwu/Magisk.git |
-                  awk '{print $2}' | sed 's#refs/tags/##' |
-                  python3 -c 'import sys,re; v=[l.strip() for l in sys.stdin if re.match(r"v[0-9]+(\.[0-9]+)*$", l.strip())]; k=lambda s:tuple(int(x) for x in s[1:].split(".")); print(max(v,key=k) if v else "")')
-          fi
-          [ -n "$REF" ] || REF=master
-          echo "ref=$REF" >> "$GITHUB_OUTPUT"
-          echo "Building upstream ref: $REF"
+      - name: Resolve the upstream ref
+        id: ref
+        run: |
+          set -e
+          REF="${{ inputs.ref }}"
+          if [ -z "$REF" ]; then
+            # Only stable version tags. `git ls-remote` also exposes canary-*
+            # tags, and a plain numeric sort would pick canary-29001 over
+            # v31.1; those refs do not carry the Compose HomeScreen.kt.
+            # macOS `sort` has no -V, so compare in Python.
+            REF=$(git ls-remote --tags --refs https://github.com/topjohnwu/Magisk.git |
+                  awk '{print $2}' | sed 's#refs/tags/##' |
+                  python3 -c 'import sys,re; v=[l.strip() for l in sys.stdin if re.match(r"v[0-9]+(\.[0-9]+)*$", l.strip())]; k=lambda s:tuple(int(x) for x in s[1:].split(".")); print(max(v,key=k) if v else "")')
+          fi
+          [ -n "$REF" ] || REF=master
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+          echo "Building upstream ref: $REF"
 
-      - name: Check out upstream at that ref
-        run: |
-          set -e
-          cp -r tools "$RUNNER_TEMP/tools"
-          git remote add upstream https://github.com/topjohnwu/Magisk.git
-          git fetch --depth 1 upstream "${{ steps.ref.outputs.ref }}"
-          git checkout -B build FETCH_HEAD
-          mkdir -p tools
-          cp -r "$RUNNER_TEMP/tools/." tools/
-          # Magisk vendors cxx-rs and quick-protobuf as git submodules
-          # (native/src/external/*). Without this the Rust build dies with
-          # "failed to read .../cxx-rs/Cargo.toml".
-          git submodule sync --recursive
-          git submodule update --init --recursive
+      - name: Check out upstream at that ref
+        run: |
+          set -e
+          cp -r tools "$RUNNER_TEMP/tools"
+          git remote add upstream https://github.com/topjohnwu/Magisk.git
+          git fetch --depth 1 upstream "${{ steps.ref.outputs.ref }}"
+          git checkout -B build FETCH_HEAD
+          mkdir -p tools
+          cp -r "$RUNNER_TEMP/tools/." tools/
+          # Magisk vendors cxx-rs and quick-protobuf as git submodules
+          # (native/src/external/*). Without this the Rust build dies with
+          # "failed to read .../cxx-rs/Cargo.toml".
+          git submodule sync --recursive
+          git submodule update --init --recursive
 
-      - name: Check upstream layout
-        run: |
-          set -e
-          HOME_SCREEN=app/apk/src/main/java/com/topjohnwu/magisk/ui/home/HomeScreen.kt
-          if [ ! -f "$HOME_SCREEN" ]; then
-            echo "::error::${{ steps.ref.outputs.ref }} uses the legacy HomeFragment layout (no HomeScreen.kt)."
-            echo "::error::TempRoot targets Magisk v31.0+ / master. Pass a v31.0+ tag or leave the input empty."
-            exit 1
-          fi
+      - name: Check upstream layout
+        run: |
+          set -e
+          HOME_SCREEN=app/apk/src/main/java/com/topjohnwu/magisk/ui/home/HomeScreen.kt
+          if [ ! -f "$HOME_SCREEN" ]; then
+            echo "::error::${{ steps.ref.outputs.ref }} uses the legacy HomeFragment layout (no HomeScreen.kt)."
+            echo "::error::TempRoot targets Magisk v31.0+ / master. Pass a v31.0+ tag or leave the input empty."
+            exit 1
+          fi
 
-      - name: Apply the TempRoot patch
-        run: python3 tools/temp_root_patch.py .
+      - name: Apply the TempRoot patch
+        run: python3 tools/temp_root_patch.py .
 
-      - name: Show the applied diff
-        run: git diff --stat
+      - name: Show the applied diff
+        run: git diff --stat
 
-      - name: Write config.prop (signing keys live only here)
-        env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: |
-          set -e
-          {
-            echo "abiList=arm64-v8a,armeabi-v7a,x86,x86_64"
-            if [ -n "$KEYSTORE_BASE64" ]; then
-              KS="$RUNNER_TEMP/keystore.jks"
-              printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$KS"
-              echo "keyStore=$KS"
-              echo "keyStorePass=$KEYSTORE_PASSWORD"
-              echo "keyAlias=$KEY_ALIAS"
-              echo "keyPass=$KEY_PASSWORD"
-              echo "signing enabled"
-            else
-              echo "::warning::KEYSTORE_BASE64 not set - Magisk falls back to the debug key."
-            fi
-          } > config.prop
-          sed 's/^keyStorePass=.*/keyStorePass=***/; s/^keyPass=.*/keyPass=***/' config.prop
+      - name: Write config.prop (signing keys live only here)
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -e
+          {
+            echo "abiList=arm64-v8a,armeabi-v7a,x86,x86_64"
+            if [ -n "$KEYSTORE_BASE64" ]; then
+              KS="$RUNNER_TEMP/keystore.jks"
+              printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$KS"
+              echo "keyStore=$KS"
+              echo "keyStorePass=$KEYSTORE_PASSWORD"
+              echo "keyAlias=$KEY_ALIAS"
+              echo "keyPass=$KEY_PASSWORD"
+              echo "signing enabled"
+            else
+              echo "::warning::KEYSTORE_BASE64 not set - Magisk falls back to the debug key."
+            fi
+          } > config.prop
+          sed 's/^keyStorePass=.*/keyStorePass=***/; s/^keyPass=.*/keyPass=***/' config.prop
 
-      - name: Set up the build environment (upstream action)
-        uses: ./.github/actions/setup
-        with:
-          is-asset-build: true
+      - name: Set up the build environment (upstream action)
+        uses: ./.github/actions/setup
+        with:
+          is-asset-build: true
 
-      - name: Build release
-        run: ./build.py -c config.prop -vr all
+      - name: Build release
+        run: ./build.py -c config.prop -vr all
 
-      - name: Stop the gradle daemon
-        run: ./app/gradlew --stop || true
+      - name: Stop the gradle daemon
+        run: ./app/gradlew --stop || true
 
-      - name: Verify the signature of the app and of its embedded stub
-        run: |
-          set -e
-          SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
-          BT=$(ls -d "$SDK"/build-tools/* 2>/dev/null | sort -V | tail -1)
-          APP=$(ls out/app-release.apk out/app-debug.apk 2>/dev/null | head -1)
-          echo "== $APP =="
-          "$BT/apksigner" verify --print-certs "$APP" | grep -E 'Signer #1 certificate (DN|SHA-256)' || true
-          rm -rf /tmp/stubchk && mkdir -p /tmp/stubchk
-          unzip -o -q "$APP" assets/stub.apk -d /tmp/stubchk || echo "no embedded stub"
-          if [ -f /tmp/stubchk/assets/stub.apk ]; then
-            echo "== embedded assets/stub.apk =="
-            "$BT/apksigner" verify --print-certs /tmp/stubchk/assets/stub.apk |
-              grep -E 'Signer #1 certificate (DN|SHA-256)' || true
-            echo "^^ both SHA-256 lines must be identical, otherwise the manager will be removed."
-          fi
+      - name: Verify the signature of the app and of its embedded stub
+        run: |
+          set -e
+          SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          BT=$(ls -d "$SDK"/build-tools/* 2>/dev/null | sort -V | tail -1)
+          APP=$(ls out/app-release.apk out/app-debug.apk 2>/dev/null | head -1)
+          echo "== $APP =="
+          "$BT/apksigner" verify --print-certs "$APP" | grep -E 'Signer #1 certificate (DN|SHA-256)' || true
+          rm -rf /tmp/stubchk && mkdir -p /tmp/stubchk
+          unzip -o -q "$APP" assets/stub.apk -d /tmp/stubchk || echo "no embedded stub"
+          if [ -f /tmp/stubchk/assets/stub.apk ]; then
+            echo "== embedded assets/stub.apk =="
+            "$BT/apksigner" verify --print-certs /tmp/stubchk/assets/stub.apk |
+              grep -E 'Signer #1 certificate (DN|SHA-256)' || true
+            echo "^^ both SHA-256 lines must be identical, otherwise the manager will be removed."
+          fi
 
-      - name: Collect artifact files
-        id: payload
-        run: |
-          set -e
-          SHA=$(git rev-parse --short HEAD)
-          REF="${{ steps.ref.outputs.ref }}"
-          # Release asset name: "Magisk v31.0.apk". For a branch (master) fall back
-          # to the app's own versionName so the file never becomes "vmaster".
-          VER="${REF#v}"
-          if ! echo "$VER" | grep -Eq '^[0-9]+(\.[0-9]+)*$'; then
-            VER=$(grep -E '^versionName' app/apk/build.gradle.kts 2>/dev/null |
-                  sed -E 's/.*"([^"]+)".*/\1/' | head -1)
-            [ -n "$VER" ] || VER="$SHA"
-            VER="${VER#v}"
-          fi
-          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
-          echo "ver=$VER" >> "$GITHUB_OUTPUT"
-          mkdir -p dist
-          APP=$(ls out/app-release.apk out/app-debug.apk 2>/dev/null | head -1)
-          [ -n "$APP" ] || { echo "::error::no manager APK in out/"; ls -l out; exit 1; }
-          cp "$APP" "dist/Magisk v$VER.apk"
-          # Source archive stays as an artifact only (the repo already has it).
-          git archive --format=tar.gz --prefix="Magisk-$SHA/" -o "dist/source-$SHA.tar.gz" HEAD
-          ls -l dist
+      - name: Collect artifact files
+        id: payload
+        run: |
+          set -e
+          SHA=$(git rev-parse --short HEAD)
+          REF="${{ steps.ref.outputs.ref }}"
+          # Release asset name: "Magisk v31.0.apk". For a branch (master) fall back
+          # to the app's own versionName so the file never becomes "vmaster".
+          VER="${REF#v}"
+          if ! echo "$VER" | grep -Eq '^[0-9]+(\.[0-9]+)*$'; then
+            VER=$(grep -E '^versionName' app/apk/build.gradle.kts 2>/dev/null |
+                  sed -E 's/.*"([^"]+)".*/\1/' | head -1)
+            [ -n "$VER" ] || VER="$SHA"
+            VER="${VER#v}"
+          fi
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "ver=$VER" >> "$GITHUB_OUTPUT"
+          mkdir -p dist
+          APP=$(ls out/app-release.apk out/app-debug.apk 2>/dev/null | head -1)
+          [ -n "$APP" ] || { echo "::error::no manager APK in out/"; ls -l out; exit 1; }
+          cp "$APP" "dist/Magisk v$VER.apk"
+          # Source archive stays as an artifact only (the repo already has it).
+          git archive --format=tar.gz --prefix="Magisk-$SHA/" -o "dist/source-$SHA.tar.gz" HEAD
+          ls -l dist
 
-      - name: Upload source artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: TempRoot-Magisk-${{ steps.ref.outputs.ref }}-${{ steps.payload.outputs.sha }}
-          path: dist/source-*.tar.gz
-          if-no-files-found: error
-          retention-days: 14
+      - name: Upload source artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TempRoot-Magisk-${{ steps.ref.outputs.ref }}-${{ steps.payload.outputs.sha }}
+          path: dist/source-*.tar.gz
+          if-no-files-found: error
+          retention-days: 14
 
-      - name: Publish release (APK only)
-        env:
-          GH_TOKEN: ${{ github.token }}
-          # Without this, gh resolves the repository from the git remotes of the
-          # checked-out tree - which is upstream (topjohnwu/Magisk) after the
-          # "check out upstream at that ref" step - and tries to modify THEIR
-          # release (403 Resource not accessible by integration).
-          GH_REPO: ${{ github.repository }}
-        run: |
-          set -e
-          VER="${{ steps.payload.outputs.ver }}"
-          TAG="temp-root-v$VER"
-          APK="dist/Magisk v$VER.apk"
-          echo "Publishing to $GH_REPO as $TAG"
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release $TAG exists - replacing the APK asset"
-            gh release upload "$TAG" "$APK" --clobber
-          else
-            gh release create "$TAG" "$APK" \
-              --target master \
-              --title "Magisk v$VER" \
-              --notes "Unofficial GPL-3.0 build based on upstream Magisk ${{ steps.ref.outputs.ref }} (${{ steps.payload.outputs.sha }}).
+      - name: Publish release (APK only)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # Without this, gh resolves the repository from the git remotes of the
+          # checked-out tree - which is upstream (topjohnwu/Magisk) after the
+          # "check out upstream at that ref" step - and tries to modify THEIR
+          # release (403 Resource not accessible by integration).
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -e
+          VER="${{ steps.payload.outputs.ver }}"
+          TAG="temp-root-v$VER"
+          APK="dist/Magisk v$VER.apk"
+          echo "Publishing to $GH_REPO as $TAG"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG exists - replacing the APK asset"
+            gh release upload "$TAG" "$APK" --clobber
+          else
+            gh release create "$TAG" "$APK" \
+              --target master \
+              --title "Magisk v$VER" \
+              --notes "Unofficial GPL-3.0 build based on upstream Magisk ${{ steps.ref.outputs.ref }} (${{ steps.payload.outputs.sha }}).
 
-          Changes: uninstall hidden, core install/update hidden, manager reinstall and latest-version row
-          removed, update channel hidden, patch-boot entry removed, Magisk card titled
-          \`Magisk（越獄模式）\` and only shown after root; the environment-fix dialog stays visible
-          but its OK button no longer reflashes anything.
+          Changes: uninstall hidden, core install/update hidden, manager reinstall and latest-version row
+          removed, update channel hidden, patch-boot entry removed, Magisk card titled
+          \`Magisk（越獄模式）\` and only shown after root; the environment-fix dialog stays visible
+          but its OK button no longer reflashes anything.
 
-          Signed with the maintainer key at build time, so the app and the \`assets/stub.apk\`
-          embedded in it share one certificate. Source: this repository."
-          fi
+          Signed with the maintainer key at build time, so the app and the \`assets/stub.apk\`
+          embedded in it share one certificate. Source: this repository."
+          fi
