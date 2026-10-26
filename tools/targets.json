@@ -44,8 +44,8 @@
     {
       "file": "app/apk/src/main/java/com/topjohnwu/magisk/ui/home/HomeScreen.kt",
       "find": "(?m)^([ \\t]*)title = stringResource\\(CoreR\\.string\\.env_fix_title\\),\\n([ \\t]*)confirmText = stringResource\\(android\\.R\\.string\\.ok\\),\\n([ \\t]*)onConfirm = \\{\\n([ \\t]*)if \\(needsFullFix\\) onNavigateInstall\\(\\) else onFixEnv\\(\\)\\n([ \\t]*)\\},\\n([ \\t]*)dismissText = stringResource\\(android\\.R\\.string\\.cancel\\),",
-      "replace": "\\1title = stringResource(CoreR.string.env_fix_title),\\n\\2// TempRoot: OK is dismiss-only. The original handler re-flashed the\\n\\2// boot image / repaired the environment, which cannot work under a\\n\\2// temporary root. The dialog itself stays visible on purpose.\\n\\2confirmText = stringResource(android.R.string.ok),\\n\\3onConfirm = { }, // TempRoot: disabled\\n\\6dismissText = stringResource(android.R.string.cancel),",
-      "why": "environment dialog: keep it, but make OK dismiss-only (no reflash/fix)"
+      "replace": "\\1title = stringResource(CoreR.string.env_fix_title),\\n\\2// TempRoot: hide confirm button to prevent accidental reboot\\n\\2confirmText = null,\\n\\2onConfirm = null,\\n\\6dismissText = stringResource(android.R.string.cancel),",
+      "why": "environment dialog: hide confirm button to prevent accidental reboot"
     },
     {
       "file": "app/apk/src/main/java/com/topjohnwu/magisk/ui/settings/SettingsScreen.kt",

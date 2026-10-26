@@ -206,8 +206,8 @@ jobs:
 
           Changes: uninstall hidden, core install/update hidden, manager reinstall and latest-version row
           removed, update channel hidden, patch-boot entry removed, Magisk card titled
-          \`Magisk（越獄模式）\` and only shown after root; the environment-fix dialog stays visible
-          but its OK button no longer reflashes anything.
+          \`Magisk（越獄模式）\` and only shown after root; the environment-fix dialog hides the
+          confirm button to prevent accidental reboot.
 
           Signed with the maintainer key at build time, so the app and the \`assets/stub.apk\`
           embedded in it share one certificate. Source: this repository."
