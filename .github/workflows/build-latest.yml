@@ -37,7 +37,7 @@ concurrency:
 
 jobs:
   build:
-    runs-on: macos-26
+    runs-on: ubuntu-24.04
     env:
       KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'key0' }}
       HAS_KEYSTORE: ${{ secrets.KEYSTORE_BASE64 != '' }}
