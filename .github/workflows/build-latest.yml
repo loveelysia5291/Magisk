@@ -207,7 +207,8 @@ jobs:
           Changes: uninstall hidden, core install/update hidden, manager reinstall and latest-version row
           removed, update channel hidden, patch-boot entry removed, Magisk card titled
           \`Magisk（越獄模式）\` and only shown after root; the environment-fix dialog is completely
-          hidden (safe for temp-root).
+          hidden (safe for temp-root); power menu adds hot reboot (kill zygote) and module flashing
+          reboot performs soft reboot to keep temp-root active.
 
           Signed with the maintainer key at build time, so the app and the \`assets/stub.apk\`
           embedded in it share one certificate. Source: this repository."

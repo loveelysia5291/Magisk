@@ -58,6 +58,36 @@
       "find": "(?m)^([ \\t]*)SettingsArrow\\(\\n([ \\t]*)title = stringResource\\(CoreR\\.string\\.patch_image\\),",
       "replace": "\\1if (false) SettingsArrow( // TempRoot: no patch-boot tool\\n\\2title = stringResource(CoreR.string.patch_image),",
       "why": "install dialog: remove the 'patch a file' (boot image) entry"
+    },
+    {
+      "file": "app/core/src/main/java/com/topjohnwu/magisk/core/ktx/XSU.kt",
+      "find": "(?m)^fun reboot\\(reason: String = if \\(Config\\.recovery\\) \"recovery\" else \"\"\\) \\{\\n([ \\t]*)if \\(reason == \"recovery\"\\) \\{",
+      "replace": "fun reboot(reason: String = if (Config.recovery) \"recovery\" else \"\") {\\n\\1if (reason == \"soft_reboot\") {\\n\\1    Shell.cmd(\"/system/bin/setprop ctl.restart zygote\").submit()\\n\\1    return\\n\\1}\\n\\1if (reason == \"recovery\") {",
+      "why": "reboot: support soft_reboot via ctl.restart zygote (temp-root safe)"
+    },
+    {
+      "file": "app/apk/src/main/java/com/topjohnwu/magisk/ui/flash/FlashViewModel.kt",
+      "find": "(?m)^([ \\t]*)fun restartPressed\\(\\) = reboot\\(\\)",
+      "replace": "\\1fun restartPressed() {\\n\\1    if (flashAction == Const.Value.FLASH_ZIP) {\\n\\1        reboot(\"soft_reboot\")\\n\\1    } else {\\n\\1        reboot()\\n\\1    }\\n\\1}",
+      "why": "flash viewmodel: restart zygote instead of full reboot after flashing zip (temp-root safe)"
+    },
+    {
+      "file": "app/apk/src/main/java/com/topjohnwu/magisk/ui/home/HomeScreen.kt",
+      "find": "(?m)^([ \\t]*)add\\(RebootOption\\(CoreR\\.string\\.reboot, Icons\\.Default\\.RestartAlt\\) \\{ reboot\\(\\) \\}\\)",
+      "replace": "\\1add(RebootOption(CoreR.string.reboot, Icons.Default.RestartAlt) { reboot() })\\n\\1add(RebootOption(\"熱重啟\", Icons.Default.Refresh) { reboot(\"soft_reboot\") })",
+      "why": "add hot reboot button between reboot and reboot to recovery"
+    },
+    {
+      "file": "app/apk/src/main/java/com/topjohnwu/magisk/ui/home/HomeScreen.kt",
+      "find": "(?m)^([ \\t]*)text = \\{\\n[ \\t]*Text\\(\\n[ \\t]*text = stringResource\\(item\\.labelRes\\),\\n[ \\t]*style = MaterialTheme\\.typography\\.bodyLarge\\n[ \\t]*\\)\\n[ \\t]*\\},",
+      "replace": "\\1text = {\\n\\1    Text(\\n\\1        text = if (item.label.isNotEmpty()) item.label else stringResource(item.labelRes),\\n\\1        style = MaterialTheme.typography.bodyLarge\\n\\1    )\\n\\1},",
+      "why": "support text label for custom reboot option"
+    },
+    {
+      "file": "app/apk/src/main/java/com/topjohnwu/magisk/ui/home/HomeScreen.kt",
+      "find": "(?m)^private class RebootOption\\(val labelRes: Int, val icon: ImageVector, val action: \\(\\) -> Unit\\)",
+      "replace": "private class RebootOption(\\n    val labelRes: Int,\\n    val icon: ImageVector,\\n    val label: String = \"\",\\n    val action: () -> Unit\\n) {\\n    constructor(labelRes: Int, icon: ImageVector, action: () -> Unit) : this(labelRes, icon, \"\", action)\\n    constructor(label: String, icon: ImageVector, action: () -> Unit) : this(0, icon, label, action)\\n}",
+      "why": "extend RebootOption to support string label constructor"
     }
   ]
 }
